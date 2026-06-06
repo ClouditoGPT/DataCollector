@@ -47,7 +47,10 @@ func (c *Client) Fetch(title string) (string, string, []string, error) {
 	params.Set("pllimit", "max")
 	params.Set("titles", title)
 
-	resp, err := http.Get(c.BaseURL + "?" + params.Encode())
+	req, _ := http.NewRequest("GET", c.BaseURL+"?"+params.Encode(), nil)
+	req.Header.Set("User-Agent", "llm-data-collector/1.0")
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return "", "", nil, err
 	}
