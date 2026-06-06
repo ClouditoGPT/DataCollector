@@ -87,8 +87,8 @@ func (c *Collector) Collect(ctx context.Context) (<-chan models.Document, error)
 				}
 			}
 
-			_ = queueStore.Save(queue.items)
-			_ = visitedStore.Save(visited.set)
+			_ = queueStore.Save(queue.Snapshot())
+			_ = visitedStore.Save(visited.Snapshot())
 		}
 	}
 
