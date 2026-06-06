@@ -125,3 +125,13 @@ func extractLinks(htmlStr string) []string {
 	f(doc)
 	return links
 }
+
+func NewFetcher(name, baseURL string) SourceFetcher {
+	switch name {
+	case "wikipedia":
+		return NewWikipediaClient(baseURL)
+	case "html":
+		return NewHTMLClient(baseURL)
+	}
+	return nil
+}
