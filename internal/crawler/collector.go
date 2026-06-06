@@ -1,9 +1,11 @@
 package crawler
 
 import (
+	"DataCollector/internal/logger"
 	"DataCollector/internal/models"
 	"context"
 	"time"
+	"unicode"
 
 	"github.com/google/uuid"
 )
@@ -14,26 +16,28 @@ type SourceFetcher interface {
 }
 
 type Collector struct {
-	fetcher         SourceFetcher
-	queueStorePath  string
+	fetcher          SourceFetcher
+	queueStorePath   string
 	visitedStorePath string
-	seeds           []string
-	rateDelay       time.Duration
-	workers         int
-	language        string
-	docType         models.DocumentType
+	seeds            []string
+	rateDelay        time.Duration
+	workers          int
+	docType          models.DocumentType
+	autoLangDetect   bool
+	state            *State
 }
 
 func NewCollector(fetcher SourceFetcher, opts ...func(*Collector)) *Collector {
 	c := &Collector{
-		fetcher:         fetcher,
-		queueStorePath:  "./data/" + fetcher.Name() + "_queue.json",
+		fetcher:          fetcher,
+		queueStorePath:   "./data/" + fetcher.Name() + "_queue.json",
 		visitedStorePath: "./data/" + fetcher.Name() + "_visited.json",
-		seeds:           []string{},
-		rateDelay:       500 * time.Millisecond,
-		workers:         5,
-		language:        "en",
-		docType:         models.ArticleDocument,
+		seeds:            []string{},
+		rateDelay:        500 * time.Millisecond,
+		workers:          5,
+		docType:          models.ArticleDocument,
+		autoLangDetect:   true,
+		state:            GetState(fetcher.Name()),
 	}
 	for _, opt := range opts {
 		opt(c)
@@ -61,7 +65,7 @@ func WithWorkers(n int) func(*Collector) {
 
 func WithLanguage(lang string) func(*Collector) {
 	return func(c *Collector) {
-		c.language = lang
+		c.autoLangDetect = false
 	}
 }
 
@@ -87,8 +91,32 @@ func (c *Collector) Name() string {
 	return c.fetcher.Name()
 }
 
+func (c *Collector) GetState() *State {
+	return c.state
+}
+
+func detectLanguage(content string) string {
+	faCount := 0
+	enCount := 0
+
+	for _, r := range content {
+		if unicode.Is(unicode.Arabic, r) || (r >= 0x0600 && r <= 0x06FF) {
+			faCount++
+		}
+		if unicode.Is(unicode.Latin, r) {
+			enCount++
+		}
+	}
+
+	if faCount > enCount {
+		return "fa"
+	}
+	return "en"
+}
+
 func (c *Collector) Collect(ctx context.Context) (<-chan models.Document, error) {
 	ch := make(chan models.Document, 100)
+	c.state.SetRunning(true)
 
 	queueStore := NewQueueStore(c.queueStorePath)
 	visitedStore := NewVisitedStore(c.visitedStorePath)
@@ -106,7 +134,12 @@ func (c *Collector) Collect(ctx context.Context) (<-chan models.Document, error)
 		visited.Add(k)
 	}
 
+	c.state.SetVisited(len(visitedMap))
+	c.state.SetQueue(len(seed))
+
 	limiter := NewRateLimiter(c.rateDelay)
+
+	logger.Info("Starting crawler: source=%s, workers=%d, visited=%d, queue=%d", c.fetcher.Name(), c.workers, len(visitedMap), len(seed))
 
 	worker := func() {
 		for {
@@ -126,27 +159,39 @@ func (c *Collector) Collect(ctx context.Context) (<-chan models.Document, error)
 			}
 
 			visited.Add(topic)
+			c.state.SetVisited(c.state.GetVisited() + 1)
+
+			logger.Info("Crawling: %s (queue=%d)", topic, len(queue.Snapshot()))
 
 			limiter.Wait()
 
 			title, text, links, err := c.fetcher.Fetch(topic)
 			if err != nil || text == "" {
+				if err != nil {
+					logger.Error("Fetch failed for %s: %v", topic, err)
+					c.state.IncErrors()
+				}
 				continue
 			}
+
+			lang := detectLanguage(text)
 
 			ch <- models.Document{
 				ID:       uuid.NewString(),
 				Source:   c.fetcher.Name(),
 				Type:     c.docType,
-				Language: c.language,
+				Language: lang,
 				URL:      topic,
 				Title:    title,
 				Content:  text,
 			}
 
+			logger.Info("Crawled: title=%s, language=%s, links=%d", title, lang, len(links))
+
 			for _, l := range links {
 				if !visited.Has(l) {
 					queue.Push(l)
+					c.state.SetQueue(c.state.GetQueue() + 1)
 				}
 			}
 
@@ -161,6 +206,8 @@ func (c *Collector) Collect(ctx context.Context) (<-chan models.Document, error)
 
 	go func() {
 		<-ctx.Done()
+		c.state.SetRunning(false)
+		logger.Info("Crawler stopped: source=%s, visited=%d, errors=%d", c.fetcher.Name(), c.state.GetVisited(), c.state.GetErrors())
 		close(ch)
 	}()
 
