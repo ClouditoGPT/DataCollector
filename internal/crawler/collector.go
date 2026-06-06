@@ -2,8 +2,10 @@ package crawler
 
 import (
 	"DataCollector/internal/logger"
-	"DataCollector/internal/models"
 	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 	"unicode"
@@ -11,21 +13,42 @@ import (
 	"github.com/google/uuid"
 )
 
+type DocumentType string
+
+const (
+	ArticleDocument     DocumentType = "article"
+	ChatDocument        DocumentType = "chat"
+	CodeDocument        DocumentType = "code"
+	InstructionDocument DocumentType = "instruction"
+	QADocument          DocumentType = "qa"
+)
+
+type Document struct {
+	ID       string       `json:"id"`
+	Source   string       `json:"source"`
+	Type     DocumentType `json:"type"`
+	Language string       `json:"language"`
+	URL      string       `json:"url"`
+	Title    string       `json:"title"`
+	Content  any          `json:"content"`
+}
+
 type SourceFetcher interface {
 	Name() string
 	Fetch(url string) (title string, content string, links []string, err error)
 }
 
 type Collector struct {
-	fetcher          SourceFetcher
-	queueStorePath   string
+	fetcher        SourceFetcher
+	queueStorePath string
 	visitedStorePath string
-	seeds            []string
-	rateDelay        time.Duration
-	workers          int
-	docType          models.DocumentType
-	autoLangDetect   bool
-	state            *State
+	rawStorePath   string
+	seeds          []string
+	rateDelay      time.Duration
+	workers        int
+	docType        DocumentType
+	autoLangDetect bool
+	state          *State
 }
 
 func NewCollector(fetcher SourceFetcher, opts ...func(*Collector)) *Collector {
@@ -33,10 +56,11 @@ func NewCollector(fetcher SourceFetcher, opts ...func(*Collector)) *Collector {
 		fetcher:          fetcher,
 		queueStorePath:   "./data/" + fetcher.Name() + "_queue.json",
 		visitedStorePath: "./data/" + fetcher.Name() + "_visited.json",
+		rawStorePath:     "./data/raw/" + fetcher.Name(),
 		seeds:            []string{},
 		rateDelay:        500 * time.Millisecond,
 		workers:          5,
-		docType:          models.ArticleDocument,
+		docType:          ArticleDocument,
 		autoLangDetect:   true,
 		state:            GetState(fetcher.Name()),
 	}
@@ -70,7 +94,7 @@ func WithLanguage(lang string) func(*Collector) {
 	}
 }
 
-func WithDocType(dt models.DocumentType) func(*Collector) {
+func WithDocType(dt DocumentType) func(*Collector) {
 	return func(c *Collector) {
 		c.docType = dt
 	}
@@ -85,6 +109,12 @@ func WithQueuePath(path string) func(*Collector) {
 func WithVisitedPath(path string) func(*Collector) {
 	return func(c *Collector) {
 		c.visitedStorePath = path
+	}
+}
+
+func WithRawPath(path string) func(*Collector) {
+	return func(c *Collector) {
+		c.rawStorePath = path
 	}
 }
 
@@ -115,8 +145,20 @@ func detectLanguage(content string) string {
 	return "en"
 }
 
-func (c *Collector) Collect(ctx context.Context) (<-chan models.Document, error) {
-	ch := make(chan models.Document, 100)
+func saveRawPage(basePath, id string, page map[string]any) error {
+	filename := filepath.Join(basePath, id+".json")
+	if err := os.MkdirAll(filepath.Dir(filename), 0755); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(page, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filename, data, 0644)
+}
+
+func (c *Collector) Collect(ctx context.Context) (<-chan Document, error) {
+	ch := make(chan Document, 100)
 	c.state.SetRunning(true)
 
 	queueStore := NewQueueStore(c.queueStorePath)
@@ -180,8 +222,9 @@ func (c *Collector) Collect(ctx context.Context) (<-chan models.Document, error)
 
 			lang := detectLanguage(text)
 
-			ch <- models.Document{
-				ID:       uuid.NewString(),
+			id := uuid.NewString()
+			doc := Document{
+				ID:       id,
 				Source:   c.fetcher.Name(),
 				Type:     c.docType,
 				Language: lang,
@@ -190,7 +233,17 @@ func (c *Collector) Collect(ctx context.Context) (<-chan models.Document, error)
 				Content:  text,
 			}
 
+			ch <- doc
+
 			logger.Info("Crawled: title=%s, language=%s, links=%d", title, lang, len(links))
+
+			_ = saveRawPage(c.rawStorePath, id, map[string]any{
+				"id":       id,
+				"title":    title,
+				"url":      topic,
+				"language": lang,
+				"content":  text,
+			})
 
 			for _, l := range links {
 				if !visited.Has(l) {
