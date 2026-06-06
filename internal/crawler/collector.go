@@ -4,6 +4,7 @@ import (
 	"DataCollector/internal/logger"
 	"DataCollector/internal/models"
 	"context"
+	"sync"
 	"time"
 	"unicode"
 
@@ -141,11 +142,10 @@ func (c *Collector) Collect(ctx context.Context) (<-chan models.Document, error)
 
 	logger.Info("Starting crawler: source=%s, workers=%d, visited=%d, queue=%d", c.fetcher.Name(), c.workers, len(visitedMap), len(seed))
 
-	done := make(chan struct{})
-	activeWorkers := int32(c.workers)
+	var wg sync.WaitGroup
 
 	worker := func() {
-		defer func() { done <- struct{}{} }()
+		defer wg.Done()
 		for {
 			select {
 			case <-ctx.Done():
@@ -204,23 +204,17 @@ func (c *Collector) Collect(ctx context.Context) (<-chan models.Document, error)
 		}
 	}
 
+	wg.Add(c.workers)
 	for i := 0; i < c.workers; i++ {
 		go worker()
 	}
 
 	go func() {
-		<-ctx.Done()
-		c.state.SetRunning(false)
-	}()
-
-	go func() {
-		for i := 0; i < c.workers; i++ {
-			<-done
-		}
+		wg.Wait()
 		close(ch)
+		c.state.SetRunning(false)
+		logger.Info("Crawler stopped: source=%s, visited=%d, errors=%d", c.fetcher.Name(), c.state.GetVisited(), c.state.GetErrors())
 	}()
-
-	_ = done
 
 	return ch, nil
 }
