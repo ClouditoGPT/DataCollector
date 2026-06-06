@@ -22,19 +22,31 @@ func (c *Collector) Collect(ctx context.Context) (<-chan models.Document, error)
 
 	ch := make(chan models.Document, 100)
 
-	topics := []string{"ایران", "تهران", "برنامه‌نویسی", "هوش مصنوعی", "زبان گو"}
+	queue := NewQueue([]string{
+		"ایران",
+		"تهران",
+		"هوش مصنوعی",
+	})
+
+	visited := NewVisited()
 
 	go func() {
 		defer close(ch)
 
-		for _, topic := range topics {
+		for {
+			topic, ok := queue.Pop()
+			if !ok {
+				return
+			}
 
-			title, text, err := FetchArticle(topic)
-			if err != nil {
+			if visited.Has(topic) {
 				continue
 			}
 
-			if text == "" {
+			visited.Add(topic)
+
+			title, text, err := FetchArticle(topic)
+			if err != nil || text == "" {
 				continue
 			}
 
@@ -53,17 +65,12 @@ func (c *Collector) Collect(ctx context.Context) (<-chan models.Document, error)
 			}
 
 			for _, l := range links {
-
-				select {
-				case <-ctx.Done():
-					return
-				default:
-					// DO NOT create fake documents yet
-					continue
+				if !visited.Has(l) {
+					queue.Push(l)
 				}
 			}
 		}
 	}()
-
+	
 	return ch, nil
 }
