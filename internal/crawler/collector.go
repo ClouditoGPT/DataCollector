@@ -141,7 +141,11 @@ func (c *Collector) Collect(ctx context.Context) (<-chan models.Document, error)
 
 	logger.Info("Starting crawler: source=%s, workers=%d, visited=%d, queue=%d", c.fetcher.Name(), c.workers, len(visitedMap), len(seed))
 
+	done := make(chan struct{})
+	activeWorkers := int32(c.workers)
+
 	worker := func() {
+		defer func() { done <- struct{}{} }()
 		for {
 			select {
 			case <-ctx.Done():
@@ -207,9 +211,16 @@ func (c *Collector) Collect(ctx context.Context) (<-chan models.Document, error)
 	go func() {
 		<-ctx.Done()
 		c.state.SetRunning(false)
-		logger.Info("Crawler stopped: source=%s, visited=%d, errors=%d", c.fetcher.Name(), c.state.GetVisited(), c.state.GetErrors())
+	}()
+
+	go func() {
+		for i := 0; i < c.workers; i++ {
+			<-done
+		}
 		close(ch)
 	}()
+
+	_ = done
 
 	return ch, nil
 }
