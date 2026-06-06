@@ -16,6 +16,17 @@ type QueryResponse struct {
 	} `json:"query"`
 }
 
+type LinkResponse struct {
+	Query struct {
+		Pages map[string]struct {
+			Title string `json:"title"`
+			Links []struct {
+				Title string `json:"title"`
+			} `json:"links"`
+		} `json:"pages"`
+	} `json:"query"`
+}
+
 func FetchArticle(
 	title string,
 ) (string, string, error) {
@@ -77,4 +88,58 @@ func FetchArticle(
 	}
 
 	return "", "", nil
+}
+
+func FetchLinks(title string) ([]string, error) {
+
+	base := "https://fa.wikipedia.org/w/api.php"
+
+	params := url.Values{}
+	params.Set("action", "query")
+	params.Set("format", "json")
+	params.Set("prop", "links")
+	params.Set("pllimit", "max")
+	params.Set("titles", title)
+
+	req, err := http.NewRequest("GET", base+"?"+params.Encode(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set(
+		"User-Agent",
+		"llm-data-collector/1.0",
+	)
+
+	client := &http.Client{}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("wiki error: %d", resp.StatusCode)
+	}
+
+	var data LinkResponse
+
+	err = json.NewDecoder(resp.Body).Decode(&data)
+	if err != nil {
+		return nil, err
+	}
+
+	links := []string{}
+
+	for _, page := range data.Query.Pages {
+		for _, l := range page.Links {
+			if l.Title != "" {
+				links = append(links, l.Title)
+			}
+		}
+	}
+
+	return links, nil
 }

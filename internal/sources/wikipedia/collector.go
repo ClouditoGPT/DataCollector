@@ -20,26 +20,25 @@ func (c *Collector) Name() string {
 
 func (c *Collector) Collect(ctx context.Context) (<-chan models.Document, error) {
 
-	topics := []string{
-		"ایران",
-		"تهران",
-		"برنامه‌نویسی",
-		"هوش مصنوعی",
-		"زبان گو",
-	}
+	ch := make(chan models.Document, 100)
 
-	ch := make(chan models.Document)
+	topics := []string{"ایران", "تهران", "برنامه‌نویسی", "هوش مصنوعی", "زبان گو"}
 
 	go func() {
+		defer close(ch)
+
 		for _, topic := range topics {
 
 			title, text, err := FetchArticle(topic)
-
 			if err != nil {
 				continue
 			}
 
-			doc := models.Document{
+			if text == "" {
+				continue
+			}
+
+			ch <- models.Document{
 				ID:       uuid.NewString(),
 				Source:   "wikipedia",
 				Type:     models.ArticleDocument,
@@ -48,11 +47,20 @@ func (c *Collector) Collect(ctx context.Context) (<-chan models.Document, error)
 				Content:  text,
 			}
 
-			select {
-			case <-ctx.Done():
-				return
+			links, err := FetchLinks(topic)
+			if err != nil {
+				continue
+			}
 
-			case ch <- doc:
+			for _, l := range links {
+
+				select {
+				case <-ctx.Done():
+					return
+				default:
+					// DO NOT create fake documents yet
+					continue
+				}
 			}
 		}
 	}()
