@@ -1,0 +1,34 @@
+{
+  "sources": [
+    {
+      "name": "html",
+      "url": "https://virgool.io/",
+      "seeds": [
+        "https://virgool.io/"
+      ],
+      "language": "fa",
+      "workers": 3,
+      "rate_delay_ms": 1000
+    },
+    {
+      "name": "html",
+      "url": "https://www.zoomit.ir/",
+      "seeds": [
+        "https://www.zoomit.ir/"
+      ],
+      "language": "fa",
+      "workers": 3,
+      "rate_delay_ms": 1000
+    },
+    {
+      "name": "html",
+      "url": "https://digiato.com/?homepage=1",
+      "seeds": [
+        "https://digiato.com/?homepage=1"
+      ],
+      "language": "fa",
+      "workers": 3,
+      "rate_delay_ms": 1000
+    }
+  ]
+}
