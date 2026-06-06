@@ -4,15 +4,13 @@
       "name": "wikipedia",
       "url": "https://fa.wikipedia.org/w/api.php",
       "seeds": ["ایران", "تهران", "هوش مصنوعی"],
-      "language": "fa",
       "workers": 5,
       "rate_delay_ms": 500
     },
     {
       "name": "html",
-      "url": "https://example.com",
-      "seeds": ["https://example.com"],
-      "language": "en",
+      "url": "https://en.wikipedia.org",
+      "seeds": ["https://en.wikipedia.org/wiki/Iran", "https://en.wikipedia.org/wiki/Tehran"],
       "workers": 3,
       "rate_delay_ms": 1000
     }
