@@ -50,7 +50,6 @@ func NewSourceCollector(f crawler.SourceFetcher, cfg SourceConfig) *crawler.Coll
 	return crawler.NewCollector(
 		f,
 		crawler.WithSeeds(cfg.Seeds),
-		crawler.WithLanguage(cfg.Language),
 		crawler.WithWorkers(cfg.Workers),
 		crawler.WithRateDelay(time.Duration(cfg.RateDelayMs)*time.Millisecond),
 		crawler.WithQueuePath("./data/"+cfg.Name+"_queue.json"),
