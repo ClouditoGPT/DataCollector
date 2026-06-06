@@ -9,23 +9,23 @@ import (
 	"golang.org/x/net/html"
 )
 
-type HTMLClient struct {
+type Client struct {
 	BaseURL string
 	Client  *http.Client
 }
 
-func NewHTMLClient(baseURL string) *HTMLClient {
-	return &HTMLClient{
+func New(baseURL string) *Client {
+	return &Client{
 		BaseURL: baseURL,
 		Client:  &http.Client{},
 	}
 }
 
-func (c *HTMLClient) Name() string {
+func (c *Client) Name() string {
 	return "html"
 }
 
-func (c *HTMLClient) Fetch(urlStr string) (string, string, []string, error) {
+func (c *Client) Fetch(urlStr string) (string, string, []string, error) {
 	parsedURL, err := url.Parse(urlStr)
 	if err != nil {
 		return "", "", nil, err
@@ -124,14 +124,4 @@ func extractLinks(htmlStr string) []string {
 	}
 	f(doc)
 	return links
-}
-
-func NewFetcher(name, baseURL string) SourceFetcher {
-	switch name {
-	case "wikipedia":
-		return NewWikipediaClient(baseURL)
-	case "html":
-		return NewHTMLClient(baseURL)
-	}
-	return nil
 }

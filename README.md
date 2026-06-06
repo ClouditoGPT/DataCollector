@@ -1,18 +1,31 @@
 # DataCollector
 
-A generic multi-source HTML web crawler.
+A generic HTML web crawler with multi-source support.
 
 ## Architecture
 
-### Generic Crawler (`internal/crawler/`)
-- `html_client.go` - `HTMLClient` implementation of `SourceFetcher` for any HTML page
-- `collector.go` - Main collector with auto language detection, rate limiting, state tracking
-- `queue.go` - Thread-safe URL queue management
-- `visited.go` - Thread-safe visited URL tracking
-- `queue_store.go` / `visited_store.go` - Persistent JSON storage
-- `ratelimit.go` - Rate limiting for requests
-- `state.go` - Runtime state tracking per source
-- `logger.go` - Thread-safe logging
+### `internal/crawler/`
+- `collector.go` - Main collector with `SourceFetcher` interface
+- `html_client.go` - Generic `Client` for any HTML page
+- `state.go` - Runtime state tracking (visited, queue, errors)
+- `logger/` - Thread-safe logging
+
+## Configuration
+
+`configs/sources.json`:
+```json
+{
+  "sources": [
+    {
+      "name": "html",
+      "url": "https://en.wikipedia.org",
+      "seeds": ["https://en.wikipedia.org/wiki/Iran"],
+      "workers": 5,
+      "rate_delay_ms": 500
+    }
+  ]
+}
+```
 
 ## Usage
 
@@ -20,14 +33,8 @@ A generic multi-source HTML web crawler.
 go run ./cmd/collector/main.go
 ```
 
-Configure seeds in `cmd/collector/main.go`:
-```go
-seeds := []string{"https://en.wikipedia.org/wiki/Iran", "https://en.wikipedia.org/wiki/Tehran"}
-```
-
 ## Features
-- **Auto language detection**: Detects Persian (`fa`) vs English (`en`) from content
-- **Logging**: All crawl events logged with topic, queue size, language
-- **State persistence**: Queue and visited URLs saved to `./data/html_queue.json` and `./data/html_visited.json`
-- **Concurrent workers**: Configurable worker count
-- **Graceful shutdown**: Handles SIGINT/SIGTERM
+- Auto language detection (Persian/Arabic vs Latin)
+- Logging with state
+- Persistent queue/visited storage
+- Graceful shutdown (SIGINT/SIGTERM)

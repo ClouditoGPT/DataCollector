@@ -36,12 +36,7 @@ func LoadConfig(path string) (*Config, error) {
 }
 
 func runSource(ctx context.Context, src SourceConfig) {
-	f := crawler.NewFetcher(src.Name, src.URL)
-	if f == nil {
-		fmt.Printf("Unknown source type: %s\n", src.Name)
-		return
-	}
-
+	f := crawler.New(src.URL)
 	source := crawler.NewCollector(
 		f,
 		crawler.WithSeeds(src.Seeds),

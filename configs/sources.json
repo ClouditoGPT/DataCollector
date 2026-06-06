@@ -1,18 +1,11 @@
 {
   "sources": [
     {
-      "name": "wikipedia",
-      "url": "https://fa.wikipedia.org/w/api.php",
-      "seeds": ["ایران", "تهران", "هوش مصنوعی"],
-      "workers": 5,
-      "rate_delay_ms": 500
-    },
-    {
       "name": "html",
       "url": "https://en.wikipedia.org",
       "seeds": ["https://en.wikipedia.org/wiki/Iran", "https://en.wikipedia.org/wiki/Tehran"],
-      "workers": 3,
-      "rate_delay_ms": 1000
+      "workers": 5,
+      "rate_delay_ms": 500
     }
   ]
 }
