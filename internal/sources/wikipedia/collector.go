@@ -22,13 +22,20 @@ func (c *Collector) Collect(ctx context.Context) (<-chan models.Document, error)
 
 	ch := make(chan models.Document, 100)
 
-	queue := NewQueue([]string{
-		"ایران",
-		"تهران",
-		"هوش مصنوعی",
-	})
+	queueStore := NewQueueStore("./data/wikipedia_queue.json")
+	visitedStore := NewVisitedStore("./data/wikipedia_visited.json")
 
-	visited := NewVisited()
+	seed := []string{"ایران", "تهران", "هوش مصنوعی"}
+
+	loadedQueue, err := queueStore.Load()
+	if err == nil && len(loadedQueue) > 0 {
+		seed = loadedQueue
+	}
+
+	queue := NewQueue(seed)
+
+	visitedMap, _ := visitedStore.Load()
+	visited := &Visited{set: visitedMap}
 
 	go func() {
 		defer close(ch)
@@ -69,8 +76,11 @@ func (c *Collector) Collect(ctx context.Context) (<-chan models.Document, error)
 					queue.Push(l)
 				}
 			}
+
+			_ = queueStore.Save(queue.items)
+			_ = visitedStore.Save(visited.set)
 		}
 	}()
-	
+
 	return ch, nil
 }
