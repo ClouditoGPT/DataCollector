@@ -1,52 +1,33 @@
 # DataCollector
 
-A generic multi-source web crawler with support for Wikipedia and HTML websites.
+A generic multi-source HTML web crawler.
 
 ## Architecture
 
 ### Generic Crawler (`internal/crawler/`)
-- `collector.go` - Main collector with `SourceFetcher` interface
+- `html_client.go` - `HTMLClient` implementation of `SourceFetcher` for any HTML page
+- `collector.go` - Main collector with auto language detection, rate limiting, state tracking
 - `queue.go` - Thread-safe URL queue management
 - `visited.go` - Thread-safe visited URL tracking
 - `queue_store.go` / `visited_store.go` - Persistent JSON storage
 - `ratelimit.go` - Rate limiting for requests
-- `state.go` - Runtime state tracking (visited count, queue size, errors)
+- `state.go` - Runtime state tracking per source
+- `logger.go` - Thread-safe logging
 
-### Logger (`internal/logger/`)
-- `logger.go` - Thread-safe logging with Info/Error/Debug levels
+## Usage
 
-### Sources
+```bash
+go run ./cmd/collector/main.go
+```
 
-Each source implements `SourceFetcher` interface:
-- `internal/sources/wikipedia/client.go` - Wikipedia API client
-- `internal/sources/htmlcrawler/client.go` - HTML website client
-
-## Configuration (`configs/sources.json`)
-
-```json
-{
-  "sources": [
-    {
-      "name": "wikipedia",
-      "url": "https://fa.wikipedia.org/w/api.php",
-      "seeds": ["ایران", "تهران"],
-      "workers": 5,
-      "rate_delay_ms": 500
-    },
-    {
-      "name": "html",
-      "url": "https://example.com",
-      "seeds": ["https://example.com"],
-      "workers": 3,
-      "rate_delay_ms": 1000
-    }
-  ]
-}
+Configure seeds in `cmd/collector/main.go`:
+```go
+seeds := []string{"https://en.wikipedia.org/wiki/Iran", "https://en.wikipedia.org/wiki/Tehran"}
 ```
 
 ## Features
-
-- **Auto language detection**: Detects Persian/Farsi (`fa`) or English (`en`) from content
-- **State tracking**: Tracks visited pages, queue size, and errors per source
-- **Persistent state**: Resumes from saved queue/visited on restart
-- **Concurrent workers**: Configurable worker count per source
+- **Auto language detection**: Detects Persian (`fa`) vs English (`en`) from content
+- **Logging**: All crawl events logged with topic, queue size, language
+- **State persistence**: Queue and visited URLs saved to `./data/html_queue.json` and `./data/html_visited.json`
+- **Concurrent workers**: Configurable worker count
+- **Graceful shutdown**: Handles SIGINT/SIGTERM
