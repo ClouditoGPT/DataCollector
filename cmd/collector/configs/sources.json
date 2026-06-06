@@ -29,6 +29,15 @@
       "language": "fa",
       "workers": 3,
       "rate_delay_ms": 1000
+    },{
+      "name": "html",
+      "url": "https://forum.freecodecamp.org/",
+      "seeds": [
+        "https://forum.freecodecamp.org/"
+      ],
+      "language": "fa",
+      "workers": 3,
+      "rate_delay_ms": 1000
     }
   ]
 }
