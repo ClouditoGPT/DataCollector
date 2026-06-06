@@ -2,7 +2,6 @@ package wikipedia
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/url"
 )
@@ -27,119 +26,61 @@ type LinkResponse struct {
 	} `json:"query"`
 }
 
-func FetchArticle(
-	title string,
-) (string, string, error) {
-
-	base := "https://fa.wikipedia.org/w/api.php"
-
-	params := url.Values{}
-
-	params.Set("action", "query")
-	params.Set("format", "json")
-	params.Set("prop", "extracts")
-	params.Set("explaintext", "1")
-	params.Set("titles", title)
-
-	url := fmt.Sprintf(
-		"%s?%s",
-		base,
-		params.Encode(),
-	)
-
-	client := &http.Client{}
-
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return "", "", err
-	}
-
-	req.Header.Set(
-		"User-Agent",
-		"llm-data-collector/1.0 (contact: your-email@example.com)",
-	)
-
-	resp, err := client.Do(req)
-
-	if err != nil {
-		return "", "", err
-	}
-
-	if resp.StatusCode != 200 {
-		return "", "", fmt.Errorf(
-			"wiki error: %d",
-			resp.StatusCode,
-		)
-	}
-
-	defer resp.Body.Close()
-
-	var data QueryResponse
-
-	err = json.NewDecoder(resp.Body).
-		Decode(&data)
-
-	if err != nil {
-		return "", "", err
-	}
-
-	for _, page := range data.Query.Pages {
-		return page.Title, page.Extract, nil
-	}
-
-	return "", "", nil
+type Client struct {
+	BaseURL string
 }
 
-func FetchLinks(title string) ([]string, error) {
+func NewClient(baseURL string) *Client {
+	return &Client{BaseURL: baseURL}
+}
 
-	base := "https://fa.wikipedia.org/w/api.php"
+func (c *Client) Name() string {
+	return "wikipedia"
+}
 
+func (c *Client) Fetch(title string) (string, string, []string, error) {
 	params := url.Values{}
 	params.Set("action", "query")
 	params.Set("format", "json")
-	params.Set("prop", "links")
+	params.Set("prop", "extracts|links")
+	params.Set("explaintext", "1")
 	params.Set("pllimit", "max")
 	params.Set("titles", title)
 
-	req, err := http.NewRequest("GET", base+"?"+params.Encode(), nil)
+	resp, err := http.Get(c.BaseURL + "?" + params.Encode())
 	if err != nil {
-		return nil, err
+		return "", "", nil, err
 	}
-
-	req.Header.Set(
-		"User-Agent",
-		"llm-data-collector/1.0",
-	)
-
-	client := &http.Client{}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("wiki error: %d", resp.StatusCode)
+		return "", "", nil, nil
 	}
 
-	var data LinkResponse
-
-	err = json.NewDecoder(resp.Body).Decode(&data)
-	if err != nil {
-		return nil, err
+	var data struct {
+		Query struct {
+			Pages map[string]struct {
+				Title   string `json:"title"`
+				Extract string `json:"extract"`
+				Links   []struct {
+					Title string `json:"title"`
+				} `json:"links"`
+			} `json:"pages"`
+		} `json:"query"`
 	}
 
-	links := []string{}
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return "", "", nil, err
+	}
 
 	for _, page := range data.Query.Pages {
+		var links []string
 		for _, l := range page.Links {
 			if l.Title != "" {
 				links = append(links, l.Title)
 			}
 		}
+		return page.Title, page.Extract, links, nil
 	}
-
-	return links, nil
+	return "", "", nil, nil
 }
