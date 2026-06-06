@@ -4,7 +4,9 @@ import (
 	"DataCollector/internal/dedupe"
 	"DataCollector/internal/pipeline"
 	"DataCollector/internal/processors"
+	"DataCollector/internal/sources/wikipedia"
 	"DataCollector/internal/storage"
+	"context"
 	"fmt"
 
 	"go.uber.org/dig"
@@ -46,7 +48,12 @@ func main() {
 			)
 		},
 	)
-	
+
+	//? Collectors
+	container.Provide(
+		wikipedia.New,
+	)
+
 	err := container.Invoke(
 		func(
 			store storage.Storage,
@@ -54,13 +61,21 @@ func main() {
 			processor *processors.DeduplicationProcessor,
 			validation *processors.ValidationProcessor,
 			p *pipeline.Pipeline,
+			source *wikipedia.Collector,
 		) {
 
-			fmt.Println(store)
-			fmt.Println(hashStore)
-			fmt.Println(processor)
-			fmt.Println(validation)
-			fmt.Println("pipeline:", p)
+			ctx := context.Background()
+			docs, err := source.Collect(ctx)
+
+			if err != nil {
+				panic(err)
+			}
+
+			for doc := range docs {
+				_ = p.Process(doc)
+
+				fmt.Println(doc.Title)
+			}
 		},
 	)
 
