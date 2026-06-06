@@ -4,7 +4,6 @@ import (
 	"DataCollector/internal/dedupe"
 	"DataCollector/internal/pipeline"
 	"DataCollector/internal/processors"
-	"DataCollector/internal/sources/wikipedia"
 	"DataCollector/internal/storage"
 	"context"
 	"fmt"
@@ -15,17 +14,13 @@ import (
 func main() {
 	container := dig.New()
 
-	//? Storages
 	container.Provide(func() storage.Storage {
 		return storage.NewJsonlStorage("./data")
 	})
 	container.Provide(func() (*dedupe.FileHashStore, error) {
-		return dedupe.NewFileHashStore(
-			"./data/hashes.txt",
-		)
+		return dedupe.NewFileHashStore("./data/hashes.txt")
 	})
 
-	//? Processors
 	container.Provide(
 		processors.NewDeduplicationProcessor,
 	)
@@ -33,7 +28,6 @@ func main() {
 		processors.NewValidationProcessor,
 	)
 
-	//? Pipeline
 	container.Provide(
 		func(
 			store storage.Storage,
@@ -49,11 +43,6 @@ func main() {
 		},
 	)
 
-	//? Collectors
-	container.Provide(
-		wikipedia.New,
-	)
-
 	err := container.Invoke(
 		func(
 			store storage.Storage,
@@ -61,20 +50,30 @@ func main() {
 			processor *processors.DeduplicationProcessor,
 			validation *processors.ValidationProcessor,
 			p *pipeline.Pipeline,
-			source *wikipedia.Collector,
 		) {
-
-			ctx := context.Background()
-			docs, err := source.Collect(ctx)
-
+			cfg, err := LoadConfig("./configs/sources.json")
 			if err != nil {
 				panic(err)
 			}
 
-			for doc := range docs {
-				_ = p.Process(doc)
+			for _, src := range cfg.Sources {
+				f := NewSourceFetcher(src.Name, src.URL)
+				if f == nil {
+					continue
+				}
 
-				fmt.Println(doc.Title)
+				source := NewSourceCollector(f, src)
+				ctx := context.Background()
+				docs, err := source.Collect(ctx)
+
+				if err != nil {
+					panic(err)
+				}
+
+				for doc := range docs {
+					_ = p.Process(doc)
+					fmt.Println(doc.Title)
+				}
 			}
 		},
 	)
