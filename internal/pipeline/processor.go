@@ -5,6 +5,6 @@ import (
 )
 
 type Processor interface {
-	Processor(
-		example models.Document) (models.Document, bool)
+	Process(
+		doc models.Document) (models.Document, bool)
 }

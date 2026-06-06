@@ -1,19 +1,19 @@
-package pipeline
+package processors
 
 import (
+	"DataCollector/internal/dedupe"
 	"DataCollector/internal/models"
-	"DataCollector/internal/storage"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 )
 
 type DeduplicationProcessor struct {
-	store storage.HashStore
+	store dedupe.HashStore
 }
 
 func NewDeduplicationProcessor(
-	store storage.HashStore,
+	store *dedupe.FileHashStore,
 ) *DeduplicationProcessor {
 
 	return &DeduplicationProcessor{
