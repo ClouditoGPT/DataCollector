@@ -1,84 +1,43 @@
 package main
 
 import (
-	"DataCollector/internal/dedupe"
-	"DataCollector/internal/pipeline"
-	"DataCollector/internal/processors"
-	"DataCollector/internal/storage"
+	"DataCollector/internal/crawler"
+	"DataCollector/internal/sources/wikipedia"
 	"context"
 	"fmt"
-
-	"go.uber.org/dig"
+	"os"
+	"os/signal"
+	"syscall"
 )
 
 func main() {
-	container := dig.New()
+	seeds := []string{"ایران"}
+	ctx, cancel := context.WithCancel(context.Background())
 
-	container.Provide(func() storage.Storage {
-		return storage.NewJsonlStorage("./data")
-	})
-	container.Provide(func() (*dedupe.FileHashStore, error) {
-		return dedupe.NewFileHashStore("./data/hashes.txt")
-	})
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		fmt.Println("\nShutting down...")
+		cancel()
+	}()
 
-	container.Provide(
-		processors.NewDeduplicationProcessor,
-	)
-	container.Provide(
-		processors.NewValidationProcessor,
-	)
-
-	container.Provide(
-		func(
-			store storage.Storage,
-			validation *processors.ValidationProcessor,
-			dedupe *processors.DeduplicationProcessor,
-		) *pipeline.Pipeline {
-
-			return pipeline.NewPipeline(
-				store,
-				validation,
-				dedupe,
-			)
-		},
+	f := wikipedia.NewClient("https://fa.wikipedia.org/w/api.php")
+	source := crawler.NewCollector(
+		f,
+		crawler.WithSeeds(seeds),
 	)
 
-	err := container.Invoke(
-		func(
-			store storage.Storage,
-			hashStore *dedupe.FileHashStore,
-			processor *processors.DeduplicationProcessor,
-			validation *processors.ValidationProcessor,
-			p *pipeline.Pipeline,
-		) {
-			cfg, err := LoadConfig("./configs/sources.json")
-			if err != nil {
-				panic(err)
-			}
+	fmt.Printf("Starting crawler: %s\n", f.Name())
 
-			for _, src := range cfg.Sources {
-				f := NewSourceFetcher(src.Name, src.URL)
-				if f == nil {
-					continue
-				}
-
-				source := NewSourceCollector(f, src)
-				ctx := context.Background()
-				docs, err := source.Collect(ctx)
-
-				if err != nil {
-					panic(err)
-				}
-
-				for doc := range docs {
-					_ = p.Process(doc)
-					fmt.Println(doc.Title)
-				}
-			}
-		},
-	)
-
+	docs, err := source.Collect(ctx)
 	if err != nil {
 		panic(err)
 	}
+
+	for doc := range docs {
+		fmt.Printf("Crawled: %s (lang=%s)\n", doc.Title, doc.Language)
+	}
+
+	fmt.Println("Done!")
 }
