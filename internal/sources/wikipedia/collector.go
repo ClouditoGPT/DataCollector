@@ -3,6 +3,7 @@ package wikipedia
 import (
 	"DataCollector/internal/models"
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -35,12 +36,21 @@ func (c *Collector) Collect(ctx context.Context) (<-chan models.Document, error)
 	queue := NewQueue(seed)
 
 	visitedMap, _ := visitedStore.Load()
-	visited := &Visited{set: visitedMap}
+	visited := NewVisited()
+	for k := range visitedMap {
+		visited.Add(k)
+	}
 
-	go func() {
-		defer close(ch)
+	limiter := NewRateLimiter(500 * time.Millisecond)
 
+	worker := func() {
 		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
 			topic, ok := queue.Pop()
 			if !ok {
 				return
@@ -51,6 +61,8 @@ func (c *Collector) Collect(ctx context.Context) (<-chan models.Document, error)
 			}
 
 			visited.Add(topic)
+
+			limiter.Wait()
 
 			title, text, err := FetchArticle(topic)
 			if err != nil || text == "" {
@@ -67,19 +79,28 @@ func (c *Collector) Collect(ctx context.Context) (<-chan models.Document, error)
 			}
 
 			links, err := FetchLinks(topic)
-			if err != nil {
-				continue
-			}
-
-			for _, l := range links {
-				if !visited.Has(l) {
-					queue.Push(l)
+			if err == nil {
+				for _, l := range links {
+					if !visited.Has(l) {
+						queue.Push(l)
+					}
 				}
 			}
 
 			_ = queueStore.Save(queue.items)
 			_ = visitedStore.Save(visited.set)
 		}
+	}
+
+	// 🔥 start workers
+	for i := 0; i < 5; i++ {
+		go worker()
+	}
+
+	// 🔥 close channel when context ends
+	go func() {
+		<-ctx.Done()
+		close(ch)
 	}()
 
 	return ch, nil
