@@ -10,9 +10,7 @@ type QueueStore struct {
 }
 
 func NewQueueStore(path string) *QueueStore {
-	return &QueueStore{
-		path: path,
-	}
+	return &QueueStore{path: path}
 }
 
 func (s *QueueStore) Save(items []string) error {

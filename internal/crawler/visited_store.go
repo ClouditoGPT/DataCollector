@@ -10,9 +10,7 @@ type VisitedStore struct {
 }
 
 func NewVisitedStore(path string) *VisitedStore {
-	return &VisitedStore{
-		path: path,
-	}
+	return &VisitedStore{path: path}
 }
 
 func (s *VisitedStore) Save(set map[string]struct{}) error {

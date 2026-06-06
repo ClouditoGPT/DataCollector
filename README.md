@@ -1,14 +1,18 @@
 # DataCollector
 
-A generic HTML web crawler with multi-source support.
+A generic HTML web crawler.
 
 ## Architecture
 
 ### `internal/crawler/`
-- `collector.go` - Main collector with `SourceFetcher` interface
+- `collector.go` - Main collector with `SourceFetcher` interface, auto language detection, state tracking, raw page saving
 - `html_client.go` - Generic `Client` for any HTML page
-- `state.go` - Runtime state tracking (visited, queue, errors)
-- `logger/` - Thread-safe logging
+- `queue.go` - Thread-safe URL queue
+- `visited.go` - Thread-safe visited set
+- `queue_store.go` / `visited_store.go` - Persistent JSON storage
+- `ratelimit.go` - Rate limiting
+- `state.go` - Runtime state tracking
+- `logger.go` - Logging
 
 ## Configuration
 
@@ -34,7 +38,7 @@ go run ./cmd/collector/main.go
 ```
 
 ## Features
-- Auto language detection (Persian/Arabic vs Latin)
-- Logging with state
-- Persistent queue/visited storage
+- Auto language detection
+- Raw pages saved to `./data/raw/{source}/{id}.json`
+- State persistence
 - Graceful shutdown (SIGINT/SIGTERM)
