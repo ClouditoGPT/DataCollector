@@ -4,13 +4,14 @@ import (
 	"DataCollector/internal/crawler"
 	"DataCollector/internal/lang"
 	"DataCollector/internal/logger"
+	"DataCollector/internal/models"
 )
 
 // LanguageDetectorMiddleware creates a middleware that detects and sets the document language
 // using the lang library (language detection library).
 // This middleware will detect the language and update the document's Language field.
 func LanguageDetectorMiddleware() crawler.Middleware {
-	return func(doc *crawler.Document) (bool, error) {
+	return func(doc *models.Document) (bool, error) {
 		if doc.Content == nil {
 			return false, nil
 		}
@@ -39,7 +40,7 @@ func LanguageDetectorWithFilter(allowedLanguages ...string) crawler.Middleware {
 		allowedSet[lang] = true
 	}
 
-	return func(doc *crawler.Document) (bool, error) {
+	return func(doc *models.Document) (bool, error) {
 		if doc.Content == nil {
 			return false, nil
 		}
