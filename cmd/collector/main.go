@@ -2,6 +2,7 @@ package main
 
 import (
 	"DataCollector/internal/crawler"
+	"DataCollector/internal/crawler/middleware"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -37,13 +38,13 @@ func LoadConfig(path string) (*Config, error) {
 
 func runSource(ctx context.Context, src SourceConfig) {
 	f := crawler.New(src.URL)
-	
+
 	// Create pipeline with middleware
+	// LanguageDetectorWithFilter detects language and filters to only allow en/fa
 	pipeline := crawler.NewPipeline(
 		crawler.LogDocument(),
-		crawler.ValidateDocument(),
+		middleware.LanguageDetectorWithFilter("en", "fa"),
 		crawler.FilterByMinLength(100),
-		crawler.FilterByLanguage("en", "fa"),
 	)
 
 	source := crawler.NewCollector(
