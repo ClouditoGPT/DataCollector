@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
-	"unicode"
 
 	"github.com/google/uuid"
 )
@@ -24,14 +23,14 @@ const (
 )
 
 type Document struct {
-	ID        string               `json:"id"`
-	Source    string               `json:"source"`
-	Type      DocumentType         `json:"type"`
-	Language  string               `json:"language"`
-	URL       string               `json:"url"`
-	Title     string               `json:"title"`
-	Content   any                  `json:"content"`
-	Metadata  map[string]any       `json:"metadata,omitempty"`
+	ID       string         `json:"id"`
+	Source   string         `json:"source"`
+	Type     DocumentType   `json:"type"`
+	Language string         `json:"language"`
+	URL      string         `json:"url"`
+	Title    string         `json:"title"`
+	Content  any            `json:"content"`
+	Metadata map[string]any `json:"metadata,omitempty"`
 }
 
 type SourceFetcher interface {
@@ -40,17 +39,16 @@ type SourceFetcher interface {
 }
 
 type Collector struct {
-	fetcher        SourceFetcher
-	queueStorePath string
+	fetcher          SourceFetcher
+	queueStorePath   string
 	visitedStorePath string
-	rawStorePath   string
-	seeds          []string
-	rateDelay      time.Duration
-	workers        int
-	docType        DocumentType
-	autoLangDetect bool
-	state          *State
-	pipeline       *Pipeline
+	rawStorePath     string
+	seeds            []string
+	rateDelay        time.Duration
+	workers          int
+	docType          DocumentType
+	state            *State
+	pipeline         *Pipeline
 }
 
 func NewCollector(fetcher SourceFetcher, opts ...func(*Collector)) *Collector {
@@ -63,7 +61,6 @@ func NewCollector(fetcher SourceFetcher, opts ...func(*Collector)) *Collector {
 		rateDelay:        500 * time.Millisecond,
 		workers:          5,
 		docType:          ArticleDocument,
-		autoLangDetect:   true,
 		state:            GetState(fetcher.Name()),
 	}
 	for _, opt := range opts {
@@ -87,12 +84,6 @@ func WithRateDelay(d time.Duration) func(*Collector) {
 func WithWorkers(n int) func(*Collector) {
 	return func(c *Collector) {
 		c.workers = n
-	}
-}
-
-func WithLanguage(lang string) func(*Collector) {
-	return func(c *Collector) {
-		c.autoLangDetect = false
 	}
 }
 
@@ -132,25 +123,6 @@ func (c *Collector) Name() string {
 
 func (c *Collector) GetState() *State {
 	return c.state
-}
-
-func detectLanguage(content string) string {
-	faCount := 0
-	enCount := 0
-
-	for _, r := range content {
-		if unicode.Is(unicode.Arabic, r) || (r >= 0x0600 && r <= 0x06FF) {
-			faCount++
-		}
-		if unicode.Is(unicode.Latin, r) {
-			enCount++
-		}
-	}
-
-	if faCount > enCount {
-		return "fa"
-	}
-	return "en"
 }
 
 func saveRawPage(basePath, id string, page map[string]any) error {
@@ -228,19 +200,16 @@ func (c *Collector) Collect(ctx context.Context) (<-chan Document, error) {
 				continue
 			}
 
-			lang := detectLanguage(text)
-	
 			id := uuid.NewString()
 			doc := Document{
-				ID:       id,
-				Source:   c.fetcher.Name(),
-				Type:     c.docType,
-				Language: lang,
-				URL:      topic,
-				Title:    title,
-				Content:  text,
+				ID:      id,
+				Source:  c.fetcher.Name(),
+				Type:    c.docType,
+				URL:     topic,
+				Title:   title,
+				Content: text,
 			}
-	
+
 			// Process document through pipeline before saving
 			if c.pipeline != nil {
 				shouldSave, err := c.pipeline.Process(&doc)
@@ -254,16 +223,16 @@ func (c *Collector) Collect(ctx context.Context) (<-chan Document, error) {
 					continue
 				}
 			}
-	
+
 			ch <- doc
-	
-			logger.Info("Crawled: title=%s, language=%s, links=%d", title, lang, len(links))
-	
+
+			logger.Info("Crawled: title=%s, language=%s, links=%d", title, doc.Language, len(links))
+
 			_ = saveRawPage(c.rawStorePath, id, map[string]any{
 				"id":       id,
 				"title":    title,
 				"url":      topic,
-				"language": lang,
+				"language": doc.Language,
 				"content":  text,
 			})
 
