@@ -1,0 +1,11 @@
+{
+  "sources": [
+    {
+      "name": "html",
+      "url": "https://en.wikipedia.org",
+      "seeds": ["https://en.wikipedia.org/wiki/Iran", "https://en.wikipedia.org/wiki/Tehran"],
+      "workers": 5,
+      "rate_delay_ms": 500
+    }
+  ]
+}

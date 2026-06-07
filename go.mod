@@ -1,8 +1,9 @@
 module DataCollector
 
-go 1.24
+go 1.21
 
 require (
-	github.com/google/uuid v1.6.0 // indirect
-	go.uber.org/dig v1.19.0 // indirect
+	github.com/google/uuid v1.6.0
+	go.uber.org/dig v1.19.0
+	golang.org/x/net v0.21.0
 )

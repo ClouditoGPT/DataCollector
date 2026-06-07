@@ -1,85 +1,89 @@
 package main
 
 import (
-	"DataCollector/internal/dedupe"
-	"DataCollector/internal/pipeline"
-	"DataCollector/internal/processors"
-	"DataCollector/internal/sources/wikipedia"
-	"DataCollector/internal/storage"
+	"DataCollector/internal/crawler"
 	"context"
+	"encoding/json"
 	"fmt"
-
-	"go.uber.org/dig"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 )
 
-func main() {
-	container := dig.New()
+type SourceConfig struct {
+	Name        string   `json:"name"`
+	URL         string   `json:"url"`
+	Seeds       []string `json:"seeds"`
+	Workers     int      `json:"workers"`
+	RateDelayMs int      `json:"rate_delay_ms"`
+}
 
-	//? Storages
-	container.Provide(func() storage.Storage {
-		return storage.NewJsonlStorage("./data")
-	})
-	container.Provide(func() (*dedupe.FileHashStore, error) {
-		return dedupe.NewFileHashStore(
-			"./data/hashes.txt",
-		)
-	})
+type Config struct {
+	Sources []SourceConfig `json:"sources"`
+}
 
-	//? Processors
-	container.Provide(
-		processors.NewDeduplicationProcessor,
-	)
-	container.Provide(
-		processors.NewValidationProcessor,
-	)
-
-	//? Pipeline
-	container.Provide(
-		func(
-			store storage.Storage,
-			validation *processors.ValidationProcessor,
-			dedupe *processors.DeduplicationProcessor,
-		) *pipeline.Pipeline {
-
-			return pipeline.NewPipeline(
-				store,
-				validation,
-				dedupe,
-			)
-		},
-	)
-
-	//? Collectors
-	container.Provide(
-		wikipedia.New,
-	)
-
-	err := container.Invoke(
-		func(
-			store storage.Storage,
-			hashStore *dedupe.FileHashStore,
-			processor *processors.DeduplicationProcessor,
-			validation *processors.ValidationProcessor,
-			p *pipeline.Pipeline,
-			source *wikipedia.Collector,
-		) {
-
-			ctx := context.Background()
-			docs, err := source.Collect(ctx)
-
-			if err != nil {
-				panic(err)
-			}
-
-			for doc := range docs {
-				_ = p.Process(doc)
-
-				fmt.Println(doc.Title)
-			}
-		},
-	)
-
+func LoadConfig(path string) (*Config, error) {
+	data, err := os.ReadFile(path)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
+	var config Config
+	if err := json.Unmarshal(data, &config); err != nil {
+		return nil, err
+	}
+	return &config, nil
+}
+
+func runSource(ctx context.Context, src SourceConfig) {
+	f := crawler.New(src.URL)
+	source := crawler.NewCollector(
+		f,
+		crawler.WithSeeds(src.Seeds),
+		crawler.WithWorkers(src.Workers),
+		crawler.WithRateDelay(time.Duration(src.RateDelayMs)*time.Millisecond),
+	)
+
+	fmt.Printf("Starting crawler: %s (workers=%d, seeds=%d)\n", src.Name, src.Workers, len(src.Seeds))
+
+	docs, err := source.Collect(ctx)
+	if err != nil {
+		fmt.Printf("Crawler error: %v\n", err)
+		return
+	}
+
+	for doc := range docs {
+		fmt.Printf("Crawled: %s (lang=%s)\n", doc.Title, doc.Language)
+	}
+
+	state := source.GetState()
+	fmt.Printf("Source %s done - visited: %d, errors: %d\n", src.Name, state.GetVisited(), state.GetErrors())
+}
+
+func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		fmt.Println("\nShutting down...")
+		cancel()
+	}()
+
+	cfg, err := LoadConfig("./configs/sources.json")
+	if err != nil {
+		fmt.Printf("Config error: %v, using defaults\n", err)
+		cfg = &Config{
+			Sources: []SourceConfig{
+				{Name: "html", URL: "https://en.wikipedia.org", Seeds: []string{"https://en.wikipedia.org/wiki/Iran"}, Workers: 5, RateDelayMs: 500},
+			},
+		}
+	}
+
+	for _, src := range cfg.Sources {
+		runSource(ctx, src)
+	}
+
+	fmt.Println("All sources completed!")
 }
