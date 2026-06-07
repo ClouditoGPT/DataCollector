@@ -24,13 +24,14 @@ const (
 )
 
 type Document struct {
-	ID       string       `json:"id"`
-	Source   string       `json:"source"`
-	Type     DocumentType `json:"type"`
-	Language string       `json:"language"`
-	URL      string       `json:"url"`
-	Title    string       `json:"title"`
-	Content  any          `json:"content"`
+	ID        string               `json:"id"`
+	Source    string               `json:"source"`
+	Type      DocumentType         `json:"type"`
+	Language  string               `json:"language"`
+	URL       string               `json:"url"`
+	Title     string               `json:"title"`
+	Content   any                  `json:"content"`
+	Metadata  map[string]any       `json:"metadata,omitempty"`
 }
 
 type SourceFetcher interface {
@@ -49,6 +50,7 @@ type Collector struct {
 	docType        DocumentType
 	autoLangDetect bool
 	state          *State
+	pipeline       *Pipeline
 }
 
 func NewCollector(fetcher SourceFetcher, opts ...func(*Collector)) *Collector {
@@ -115,6 +117,12 @@ func WithVisitedPath(path string) func(*Collector) {
 func WithRawPath(path string) func(*Collector) {
 	return func(c *Collector) {
 		c.rawStorePath = path
+	}
+}
+
+func WithPipeline(pipeline *Pipeline) func(*Collector) {
+	return func(c *Collector) {
+		c.pipeline = pipeline
 	}
 }
 
@@ -221,7 +229,7 @@ func (c *Collector) Collect(ctx context.Context) (<-chan Document, error) {
 			}
 
 			lang := detectLanguage(text)
-
+	
 			id := uuid.NewString()
 			doc := Document{
 				ID:       id,
@@ -232,11 +240,25 @@ func (c *Collector) Collect(ctx context.Context) (<-chan Document, error) {
 				Title:    title,
 				Content:  text,
 			}
-
+	
+			// Process document through pipeline before saving
+			if c.pipeline != nil {
+				shouldSave, err := c.pipeline.Process(&doc)
+				if err != nil {
+					logger.Error("Pipeline error for %s: %v", topic, err)
+					c.state.IncErrors()
+					continue
+				}
+				if !shouldSave {
+					logger.Info("Document skipped by pipeline: %s", topic)
+					continue
+				}
+			}
+	
 			ch <- doc
-
+	
 			logger.Info("Crawled: title=%s, language=%s, links=%d", title, lang, len(links))
-
+	
 			_ = saveRawPage(c.rawStorePath, id, map[string]any{
 				"id":       id,
 				"title":    title,

@@ -37,11 +37,21 @@ func LoadConfig(path string) (*Config, error) {
 
 func runSource(ctx context.Context, src SourceConfig) {
 	f := crawler.New(src.URL)
+	
+	// Create pipeline with middleware
+	pipeline := crawler.NewPipeline(
+		crawler.LogDocument(),
+		crawler.ValidateDocument(),
+		crawler.FilterByMinLength(100),
+		crawler.FilterByLanguage("en", "fa"),
+	)
+
 	source := crawler.NewCollector(
 		f,
 		crawler.WithSeeds(src.Seeds),
 		crawler.WithWorkers(src.Workers),
 		crawler.WithRateDelay(time.Duration(src.RateDelayMs)*time.Millisecond),
+		crawler.WithPipeline(pipeline),
 	)
 
 	fmt.Printf("Starting crawler: %s (workers=%d, seeds=%d)\n", src.Name, src.Workers, len(src.Seeds))
