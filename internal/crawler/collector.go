@@ -2,6 +2,7 @@ package crawler
 
 import (
 	"DataCollector/internal/logger"
+	"DataCollector/internal/models"
 	"context"
 	"encoding/json"
 	"os"
@@ -25,7 +26,7 @@ type Collector struct {
 	seeds            []string
 	rateDelay        time.Duration
 	workers          int
-	docType          DocumentType
+	docType          models.DocumentType
 	state            *State
 	pipeline         *Pipeline
 }
@@ -39,7 +40,7 @@ func NewCollector(fetcher SourceFetcher, opts ...func(*Collector)) *Collector {
 		seeds:            []string{},
 		rateDelay:        500 * time.Millisecond,
 		workers:          5,
-		docType:          ArticleDocument,
+		docType:          models.ArticleDocument,
 		state:            GetState(fetcher.Name()),
 	}
 	for _, opt := range opts {
@@ -66,7 +67,7 @@ func WithWorkers(n int) func(*Collector) {
 	}
 }
 
-func WithDocType(dt DocumentType) func(*Collector) {
+func WithDocType(dt models.DocumentType) func(*Collector) {
 	return func(c *Collector) {
 		c.docType = dt
 	}
@@ -116,8 +117,8 @@ func saveRawPage(basePath, id string, page map[string]any) error {
 	return os.WriteFile(filename, data, 0644)
 }
 
-func (c *Collector) Collect(ctx context.Context) (<-chan Document, error) {
-	ch := make(chan Document, 100)
+func (c *Collector) Collect(ctx context.Context) (<-chan models.Document, error) {
+	ch := make(chan models.Document, 100)
 	c.state.SetRunning(true)
 
 	queueStore := NewQueueStore(c.queueStorePath)
@@ -180,7 +181,7 @@ func (c *Collector) Collect(ctx context.Context) (<-chan Document, error) {
 			}
 
 			id := uuid.NewString()
-			doc := Document{
+			doc := models.Document{
 				ID:      id,
 				Source:  c.fetcher.Name(),
 				Type:    c.docType,
